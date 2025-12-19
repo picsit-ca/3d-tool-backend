@@ -47,3 +47,15 @@ app.post('/logout', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
+
+app.post('/convert', (req, res) => {
+  const token = req.cookies.token
+  if (!token) {
+    return res.status(401).json({ error: 'Chưa đăng nhập' })
+  }
+
+  res.json({
+    success: true,
+    message: 'Convert OK (server)'
+  })
+})
