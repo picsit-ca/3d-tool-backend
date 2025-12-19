@@ -15,17 +15,14 @@ app.use(cors({
   credentials: true
 }))
 
-app.get('/', (req, res) => {
-  res.send('Backend OK')
-})
-
-// giả lập login
+// test login
 app.post('/login', (req, res) => {
-  const userId = 'demo_user' // sau này thay bằng google id
+  const userId = 'demo_user' 
 
   if (!users[userId]) {
+    // moi acc co san 2 tokens
     users[userId] = {
-      totalBlocks: 2000
+      tokens: 2 
     }
   }
 
@@ -45,20 +42,12 @@ app.get('/me', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
-  const totalBlocks = users[userId].totalBlocks
+  const user = users[userId]
 
   res.json({
-    totalBlocks,
-    tokens: Math.ceil(totalBlocks / 1000)
+    tokens: user.tokens,
+    totalBlocks: user.tokens * 1000 // quy doi de hien thi
   })
-})
-
-app.post('/logout', (req, res) => {
-  res.clearCookie('token', {
-    secure: true,
-    sameSite: 'none'
-  })
-  res.json({ success: true })
 })
 
 app.post('/convert', (req, res) => {
@@ -67,23 +56,39 @@ app.post('/convert', (req, res) => {
     return res.status(401).json({ error: 'Chưa đăng nhập' })
   }
 
-  const blocksUsed = req.body.blocks || 0
+  const blocksToConvert = req.body.blocks || 0
   const user = users[userId]
 
-  if (user.totalBlocks < blocksUsed) {
-    return res.status(403).json({ error: 'Hết block' })
+  // 1. tinh toan chi phi
+  const cost = Math.ceil(blocksToConvert / 1000)
+
+  // 2. kiem tra token
+  if (user.tokens < cost) {
+    return res.status(403).json({ 
+      success: false, 
+      error: `Bạn không đủ Token. Cần ${cost} nhưng chỉ có ${user.tokens}` 
+    })
   }
 
-  user.totalBlocks -= blocksUsed
+  // 3. tru token
+  user.tokens -= cost
 
   res.json({
     success: true,
-    totalBlocks: user.totalBlocks,
-    tokens: Math.ceil(user.totalBlocks / 1000)
+    message: `Chuyển đổi thành công! Đã dùng ${cost} Token.`,
+    tokens: user.tokens,
+    totalBlocks: user.tokens * 1000
   })
 })
 
-// always cuoi file
+app.post('/logout', (req, res) => {
+  res.clearCookie('userId', {
+    secure: true,
+    sameSite: 'none'
+  })
+  res.json({ success: true })
+})
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
