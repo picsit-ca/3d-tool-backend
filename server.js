@@ -19,7 +19,6 @@ app.get('/', (req, res) => {
 
 // giả lập login
 app.post('/login', (req, res) => {
-  // giả token
   const token = 'secure_token_example'
 
   res.cookie('token', token, {
@@ -36,16 +35,15 @@ app.get('/me', (req, res) => {
   const token = req.cookies.token
   if (!token) return res.status(401).json({ error: 'Unauthorized' })
 
-  res.json({ user: 'ok', token })
+  res.json({ user: 'ok' })
 })
 
 app.post('/logout', (req, res) => {
-  res.clearCookie('token')
+  res.clearCookie('token', {
+    secure: true,
+    sameSite: 'none'
+  })
   res.json({ success: true })
-})
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
 })
 
 app.post('/convert', (req, res) => {
@@ -60,13 +58,7 @@ app.post('/convert', (req, res) => {
   })
 })
 
-fetch("https://threed-tool-backend.onrender.com/")
-  .then(res => res.text())
-  .then(text => {
-    console.log("Backend says:", text)
-    alert("Backend says: " + text)
-  })
-  .catch(err => {
-    console.error(err)
-    alert("Cannot connect to backend")
-  })
+/* 🔽 LUÔN ĐẶT CUỐI FILE */
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+})
