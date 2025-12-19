@@ -5,6 +5,8 @@ const cors = require('cors')
 const app = express()
 const PORT = process.env.PORT || 3000
 
+const users = {}
+
 app.use(express.json())
 app.use(cookieParser())
 
@@ -19,23 +21,36 @@ app.get('/', (req, res) => {
 
 // giả lập login
 app.post('/login', (req, res) => {
-  const token = 'secure_token_example'
+  const userId = 'demo_user' // sau này thay bằng google id
 
-  res.cookie('token', token, {
+  if (!users[userId]) {
+    users[userId] = {
+      totalBlocks: 2000
+    }
+  }
+
+  res.cookie('userId', userId, {
     httpOnly: true,
     secure: true,
     sameSite: 'none',
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000
   })
 
   res.json({ success: true })
 })
 
 app.get('/me', (req, res) => {
-  const token = req.cookies.token
-  if (!token) return res.status(401).json({ error: 'Unauthorized' })
+  const userId = req.cookies.userId
+  if (!userId || !users[userId]) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
 
-  res.json({ user: 'ok' })
+  const totalBlocks = users[userId].totalBlocks
+
+  res.json({
+    totalBlocks,
+    tokens: Math.ceil(totalBlocks / 1000)
+  })
 })
 
 app.post('/logout', (req, res) => {
@@ -47,18 +62,28 @@ app.post('/logout', (req, res) => {
 })
 
 app.post('/convert', (req, res) => {
-  const token = req.cookies.token
-  if (!token) {
+  const userId = req.cookies.userId
+  if (!userId || !users[userId]) {
     return res.status(401).json({ error: 'Chưa đăng nhập' })
   }
 
+  const blocksUsed = req.body.blocks || 0
+  const user = users[userId]
+
+  if (user.totalBlocks < blocksUsed) {
+    return res.status(403).json({ error: 'Hết block' })
+  }
+
+  user.totalBlocks -= blocksUsed
+
   res.json({
     success: true,
-    message: 'Convert OK (server)'
+    totalBlocks: user.totalBlocks,
+    tokens: Math.ceil(user.totalBlocks / 1000)
   })
 })
 
-/* 🔽 LUÔN ĐẶT CUỐI FILE */
+// always cuoi file
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
