@@ -51,43 +51,44 @@ app.get('/me', (req, res) => {
 })
 
 app.post('/convert', async (req, res) => {
-  const userId = req.cookies.userId
-  if (!userId || !users[userId]) {
-    return res.status(401).json({ error: 'Chưa đăng nhập' })
-  }
-
-  if (convertingUsers.has(userId)) {
-    return res.status(429).json({
-      error: 'Bạn đang có 1 convert đang chạy'
-    })
-  }
-
-  const blocksToConvert = req.body.blocks || 0
-  const cost = Math.ceil(blocksToConvert / 1000)
-  const user = users[userId]
-
-  if (user.tokens < cost) {
-    return res.status(403).json({
-      error: `Bạn không đủ Token. Cần ${cost} nhưng chỉ có ${user.tokens}`
-    })
-  }
-
-  convertingUsers.add(userId)
-
   try {
-    // fake load lau
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    const userId = req.cookies.userId
+    if (!userId || !users[userId]) {
+      return res.status(401).json({ error: 'Chưa đăng nhập' })
+    }
 
-    // tru token sau khi convert
-    user.tokens -= cost
+    if (convertingUsers.has(userId)) {
+      return res.status(429).json({
+        error: 'Bạn đang có 1 convert đang chạy'
+      })
+    }
 
-    res.json({
-      success: true,
-      message: `Chuyển đổi thành công! Đã dùng ${cost} Token.`,
-      tokens: user.tokens
-    })
-  } finally {
-    convertingUsers.delete(userId)
+    const blocksToConvert = Number(req.body?.blocks || 0)
+    const cost = Math.ceil(blocksToConvert / 1000)
+    const user = users[userId]
+
+    if (user.tokens < cost) {
+      return res.status(403).json({
+        error: `Bạn không đủ Token`
+      })
+    }
+
+    convertingUsers.add(userId)
+
+    try {
+      await new Promise(r => setTimeout(r, 3000))
+      user.tokens -= cost
+
+      res.json({
+        success: true,
+        tokens: user.tokens
+      })
+    } finally {
+      convertingUsers.delete(userId)
+    }
+  } catch (err) {
+    console.error('CONVERT ERROR:', err)
+    res.status(500).json({ error: 'Server error' })
   }
 })
 
