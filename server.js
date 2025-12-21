@@ -50,35 +50,45 @@ app.get('/me', (req, res) => {
   })
 })
 
-app.post('/convert', (req, res) => {
+app.post('/convert', async (req, res) => {
   const userId = req.cookies.userId
   if (!userId || !users[userId]) {
     return res.status(401).json({ error: 'Chưa đăng nhập' })
   }
 
-  const blocksToConvert = req.body.blocks || 0
-  const user = users[userId]
-
-  // 1. tinh toan chi phi
-  const cost = Math.ceil(blocksToConvert / 1000)
-
-  // 2. kiem tra token
-  if (user.tokens < cost) {
-    return res.status(403).json({ 
-      success: false, 
-      error: `Bạn không đủ Token. Cần ${cost} nhưng chỉ có ${user.tokens}` 
+  if (convertingUsers.has(userId)) {
+    return res.status(429).json({
+      error: 'Bạn đang có 1 convert đang chạy'
     })
   }
 
-  // 3. tru token
-  user.tokens -= cost
+  const blocksToConvert = req.body.blocks || 0
+  const cost = Math.ceil(blocksToConvert / 1000)
+  const user = users[userId]
 
-  res.json({
-    success: true,
-    message: `Chuyển đổi thành công! Đã dùng ${cost} Token.`,
-    tokens: user.tokens,
-    totalBlocks: user.tokens * 1000
-  })
+  if (user.tokens < cost) {
+    return res.status(403).json({
+      error: `Bạn không đủ Token. Cần ${cost} nhưng chỉ có ${user.tokens}`
+    })
+  }
+
+  convertingUsers.add(userId)
+
+  try {
+    // fake load lau
+    await new Promise(resolve => setTimeout(resolve, 3000))
+
+    // tru token sau khi convert
+    user.tokens -= cost
+
+    res.json({
+      success: true,
+      message: `Chuyển đổi thành công! Đã dùng ${cost} Token.`,
+      tokens: user.tokens
+    })
+  } finally {
+    convertingUsers.delete(userId)
+  }
 })
 
 app.post('/logout', (req, res) => {
