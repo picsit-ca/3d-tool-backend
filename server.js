@@ -23,7 +23,7 @@ app.post('/login', (req, res) => {
   if (!users[userId]) {
     // moi acc co san 2 tokens
     users[userId] = {
-      tokens: 2 
+      tokens: 999 // test 
     }
   }
 
