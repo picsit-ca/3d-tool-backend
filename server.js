@@ -51,7 +51,7 @@ app.get('/me', (req, res) => {
   })
 })
 
-app.post('/convert', async (req, res) => {
+app.post('/convert', (req, res) => {
   const userId = req.cookies.userId
   if (!userId || !users[userId]) {
     return res.status(401).json({ error: 'Chưa đăng nhập' })
@@ -61,36 +61,32 @@ app.post('/convert', async (req, res) => {
     return res.status(429).json({ error: 'Đang convert' })
   }
 
-  convertingUsers.add(userId)
-
   const blocks = req.body.blocks || 0
   const cost = Math.max(1, Math.ceil(blocks / 1000))
   const user = users[userId]
 
   if (user.tokens < cost) {
-    convertingUsers.delete(userId)
     return res.status(403).json({ error: 'Không đủ token' })
   }
 
-  try {
-    // gia lap convert that theo blocks
-    const batchSize = 1000
-    const totalBatches = Math.ceil(blocks / batchSize)
+  // khoa nut user
+  convertingUsers.add(userId)
 
-    for (let i = 0; i < totalBatches; i++) {
-      await new Promise(r => setTimeout(r, 100)) // gia lap CPU
-    }
+  // tru tokens
+  user.tokens -= cost
 
-    user.tokens -= cost
+  const estimatedTime = cost * 1000 // ms
 
-    res.json({
-      success: true,
-      tokens: user.tokens
-    })
+  res.json({
+    success: true,
+    tokens: user.tokens,
+    estimatedTime
+  })
 
-  } finally {
+  // mo khoa nut sau khi convert
+  setTimeout(() => {
     convertingUsers.delete(userId)
-  }
+  }, estimatedTime)
 })
 
 app.post('/logout', (req, res) => {
