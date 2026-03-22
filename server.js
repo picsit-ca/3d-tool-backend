@@ -14,7 +14,7 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "day-la-mat-ma-bi-mat";
 connectDB();
 
 app.use(cors({
-    origin: ['https://3d-tool-frontend.vercel.app', 'http://127.0.0.1:5500', 'https://picsit-ca.github.io'],
+    origin: ['https://3d-tool-frontend.vercel.app', 'http://127.0.0.1:5500', 'https://picsit-ca.github.io/3d-tool-frontend'],
     credentials: true
 }));
 app.use(express.json());
