@@ -8,13 +8,13 @@ const User = require('./models/User');
 const app = express();
 const port = process.env.PORT || 3000;
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "day-la-mat-ma-bi-mat";
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "dat_mot_ma_bi_mat_o_day";
 
 // Connect to database
 connectDB();
 
 app.use(cors({
-    origin: ['https://3d-tool-frontend.vercel.app', 'http://127.0.0.1:5500', 'https://picsit-ca.github.io/3d-tool-frontend'],
+    origin: ['https://3d-tool-frontend.vercel.app', 'http://127.0.0.1:5500', 'https://picsit-ca.github.io'],
     credentials: true
 }));
 app.use(express.json());
