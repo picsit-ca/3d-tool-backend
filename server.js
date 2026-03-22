@@ -13,10 +13,22 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "dat_mot_ma_bi_mat_o_day";
 // Connect to database
 connectDB();
 
-app.use(cors({
-    origin: true,
-    credentials: true
-}));
+const allowedOrigins = ['https://3d-tool-frontend.vercel.app', 'http://127.0.0.1:5500', 'https://picsit-ca.github.io'];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+};
+
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
+
 app.use(express.json());
 app.use(cookieParser());
 
