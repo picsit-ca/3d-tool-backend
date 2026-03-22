@@ -1,13 +1,27 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
-require('dotenv').config();
-const connectDB = require('./db');
+const mongoose = require('mongoose');
 const User = require('./models/User');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "dat_mot_ma_bi_mat_o_day";
+// !!! IMPORTANT !!!
+// REPLACE WITH YOUR ACTUAL MONGODB CONNECTION STRING AND A STRONG SECRET
+const MONGO_URI = "YOUR_MONGO_URI_HERE";
+const WEBHOOK_SECRET = "YOUR_WEBHOOK_SECRET_HERE";
+
+
+// Database connection function
+const connectDB = async () => {
+    try {
+        await mongoose.connect(MONGO_URI);
+        console.log('MongoDB connected');
+    } catch (err) {
+        console.error("MongoDB connection error:", err.message);
+        process.exit(1);
+    }
+};
 
 // Connect to database
 connectDB();
