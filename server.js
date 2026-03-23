@@ -6,6 +6,11 @@ const mongoose = require('mongoose');
 const User = require('./models/User');
 
 const app = express();
+
+app.use((_req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    next();
+});
 const port = process.env.PORT || 3000;
 
 const MONGO_URI = process.env.MONGO_URI;
