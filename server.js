@@ -11,16 +11,18 @@ const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
+const port = process.env.PORT || 3000;
+const BASE_URL = 'https://threed-tool-backend.onrender.com';
 
-// Serve static files from the frontend directory
+// Serve static frontend files
 app.use(express.static(path.join(__dirname, '../3d-tool-frontend')));
 
 app.use((_req, res, next) => {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
     next();
 });
-const port = process.env.PORT || 3000;
 
+// Environment variables - All loaded directly from Render config
 const MONGO_URI = process.env.MONGO_URI;
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim().replace(/\s+/g, '');
 const GOOGLE_CLIENT_SECRET = String(process.env.GOOGLE_CLIENT_SECRET || '').trim().replace(/\s+/g, '');
@@ -28,57 +30,37 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const TSR_PARTNER_ID = process.env.TSR_PARTNER_ID;
 const TSR_PARTNER_KEY = process.env.TSR_PARTNER_KEY;
 
-// Debug: Log credential lengths to verify they are loaded correctly
-console.log('=== Google OAuth Debug Info ===');
-console.log('GOOGLE_CLIENT_ID length:', GOOGLE_CLIENT_ID.length);
-console.log('GOOGLE_CLIENT_SECRET length:', GOOGLE_CLIENT_SECRET.length);
-console.log('GOOGLE_CLIENT_ID:', GOOGLE_CLIENT_ID);
-console.log('GOOGLE_CLIENT_SECRET:', GOOGLE_CLIENT_SECRET);
-
-// Validate credentials are not empty
-if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    console.error('❌ ERROR: Google OAuth credentials are missing or empty!');
-    process.exit(1);
-}
-
-console.log('✅ Google OAuth credentials loaded successfully');
-console.log('=== End Debug Info ===');
-
-// Initialize OAuth2Client
+// Initialize Google OAuth
 const client = new OAuth2Client({
     clientId: GOOGLE_CLIENT_ID,
     clientSecret: GOOGLE_CLIENT_SECRET,
-    redirectUri: 'http://localhost:3000/auth/google/callback'
+    redirectUri: `${BASE_URL}/auth/google/callback`
 });
 
-// ─── CORS ────────────────────────────────────────────────────────────────────
-// Đặt TRƯỚC tất cả các route. origin: true = phản chiếu origin của request,
-// credentials: true = cho phép gửi cookie cross-origin.
+// Production CORS configuration
 app.use(cors({
-    origin: true,
+    origin: [BASE_URL, 'http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ─── Body / Cookie parsers ────────────────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
-
-// ─── Database ─────────────────────────────────────────────────────────────────
+// MongoDB Connection
 const connectDB = async () => {
     try {
         await mongoose.connect(MONGO_URI);
-        console.log('MongoDB connected');
+        console.log('✅ MongoDB connected successfully');
     } catch (err) {
-        console.error('MongoDB connection error:', err.message);
+        console.error('❌ MongoDB connection error:', err.message);
         process.exit(1);
     }
 };
 connectDB();
 
-// ─── Middleware: gắn req.user từ cookie userId ────────────────────────────────
+// Auth middleware
 app.use(async (req, res, next) => {
     const userId = req.cookies.userId;
     if (userId) {
@@ -92,35 +74,32 @@ app.use(async (req, res, next) => {
     next();
 });
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
+// ROUTES
+// ─────────────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
-  res.send('Server 3D Tool đang chạy');
+  res.send('Server 3D Tool đang chạy cực chill ông giáo ạ! ✅ Production mode');
 });
 
-// POST /login  – nhận userId từ body, tạo user nếu chưa có, set cookie
+// Login endpoint
 app.post('/login', async (req, res) => {
     const { userId } = req.body;
-
-    if (!userId) {
-        return res.status(400).json({ error: 'userId is required' });
-    }
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
 
     try {
         let user = await User.findOne({ userId });
-
         if (!user) {
             console.log('Creating new user:', userId);
             user = new User({ userId, tokens: 10 });
             await user.save();
         }
 
-        // Cookie httpOnly + Secure + SameSite=None để hoạt động cross-origin
         res.cookie('userId', userId, {
             httpOnly: true,
-            secure: true,
+            secure: process.env.NODE_ENV === 'production',
             sameSite: 'None',
-            maxAge: 30 * 24 * 60 * 60 * 1000 // 30 ngày
+            maxAge: 30 * 24 * 60 * 60 * 1000
         });
 
         res.json({ message: 'Logged in successfully' });
@@ -130,7 +109,7 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// GET /me  – trả về số token của user đang đăng nhập (dựa vào cookie userId)
+// Get user profile
 app.get('/me', (req, res) => {
     if (req.user) {
         res.json({ tokens: req.user.tokens });
@@ -139,11 +118,9 @@ app.get('/me', (req, res) => {
     }
 });
 
-// POST /convert  – trừ token theo số block, yêu cầu cookie userId hợp lệ
+// Convert endpoint
 app.post('/convert', async (req, res) => {
-    if (!req.user) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
     const { blocks } = req.body;
     const cost = Math.ceil(blocks / 1000);
@@ -162,16 +139,13 @@ app.post('/convert', async (req, res) => {
     }
 });
 
-// Rate limiting for recharge requests
+// Rate limiting for recharge
 const rechargeRateLimit = new Map();
 
-// POST /api/recharge  – Thesieure API v2
+// TSR Recharge Endpoint
 app.post('/api/recharge', async (req, res) => {
-    if (!req.user) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
-    // Rate limit: 3 requests / 5 minutes
     const userId = req.user.userId;
     const now = Date.now();
     const userRequests = rechargeRateLimit.get(userId) || [];
@@ -188,15 +162,13 @@ app.post('/api/recharge', async (req, res) => {
     }
 
     try {
-        // Generate request ID
         const requestId = String(Date.now());
         
-        // Calculate TSR signature
+        // ✅ TSR Signature calculation: md5(PARTNER_KEY + code + serial)
         const sign = crypto.createHash('md5')
             .update(TSR_PARTNER_KEY + code + serial)
             .digest('hex');
 
-        // Save transaction first
         const transaction = new Transaction({
             userId,
             requestId,
@@ -208,7 +180,6 @@ app.post('/api/recharge', async (req, res) => {
         });
         await transaction.save();
 
-        // Update rate limit
         recentRequests.push(now);
         rechargeRateLimit.set(userId, recentRequests);
 
@@ -229,6 +200,7 @@ app.post('/api/recharge', async (req, res) => {
         });
 
         const tsrData = await tsrResponse.json();
+        console.log(`📤 TSR Request sent: ${requestId} | Response: ${tsrData.status}`);
         
         res.json({
             success: true,
@@ -238,42 +210,45 @@ app.post('/api/recharge', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('TSR API Error:', error);
+        console.error('❌ TSR API Error:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// POST /api/callback/thesieure  – Thesieure Webhook v2
+// TSR Callback Webhook
 app.post('/api/callback/thesieure', async (req, res) => {
+    console.log('📥 Received TSR Callback:', JSON.stringify(req.body));
+    
     try {
         const { request_id, code, serial, status, amount, callback_sign } = req.body;
 
-        // Verify signature
+        // ✅ Verify signature: md5(PARTNER_KEY + code + serial)
         const expectedSign = crypto.createHash('md5')
             .update(TSR_PARTNER_KEY + code + serial)
             .digest('hex');
 
         if (callback_sign !== expectedSign) {
+            console.log(`❌ Invalid signature. Expected: ${expectedSign} Received: ${callback_sign}`);
             return res.status(401).json({ status: 'error', message: 'Invalid signature' });
         }
 
-        // Find transaction
         const transaction = await Transaction.findOne({ requestId: request_id });
         if (!transaction) {
+            console.log(`❌ Transaction not found: ${request_id}`);
             return res.status(404).json({ status: 'error', message: 'Transaction not found' });
         }
 
         if (transaction.status !== 0) {
+            console.log(`ℹ️ Transaction already processed: ${request_id}`);
             return res.status(200).json({ status: 'success', message: 'Already processed' });
         }
 
-        // Update transaction
         transaction.realAmount = amount;
         transaction.status = status;
 
         if (status === 1 || status === 3) {
-            // Success or Wrong Amount - grant tokens based on real amount
             const tokensToAdd = Math.floor(amount / 1000);
+            console.log(`✅ Granting ${tokensToAdd} tokens to user: ${transaction.userId}`);
             
             await User.findOneAndUpdate(
                 { userId: transaction.userId },
@@ -282,80 +257,19 @@ app.post('/api/callback/thesieure', async (req, res) => {
         }
 
         await transaction.save();
-
-        console.log(`TSR Callback: ${request_id} | Status: ${status} | Amount: ${amount}`);
+        console.log(`✅ Transaction processed: ${request_id} | Status: ${status} | Amount: ${amount}`);
+        
         res.json({ status: 'success', message: 'OK' });
 
     } catch (error) {
-        console.error('TSR Callback Error:', error);
+        console.error('❌ TSR Callback Error:', error);
         res.status(500).json({ status: 'error', message: 'Server error' });
     }
 });
 
-// GET /auth/google  – initiate Google OAuth flow
-app.get('/auth/google', (req, res) => {
-    const authUrl = client.generateAuthUrl({
-        access_type: 'offline',
-        scope: ['profile', 'email'],
-        redirect_uri: 'http://localhost:3000/auth/google/callback'
-    });
-    
-    res.redirect(authUrl);
-});
-
-// GET /auth/google/callback  – handle Google OAuth callback
-app.get('/auth/google/callback', async (req, res) => {
-    const { code } = req.query;
-    if (!code) return res.status(400).send('Authorization code not provided');
-    
-    try {
-        const { tokens } = await client.getToken(code);
-        const ticket = await client.verifyIdToken({
-            idToken: tokens.id_token,
-            audience: GOOGLE_CLIENT_ID
-        });
-        
-        const payload = ticket.getPayload();
-        const userId = payload.sub; // Critical: We need the Google ID
-        
-        // 1. Create or find user (Replaces the need for the frontend to call /login)
-        let user = await User.findOne({ userId });
-        if (!user) {
-            user = new User({ userId, tokens: 10 });
-            await user.save();
-        }
-        
-        // 2. Set the cookie for /me and /convert endpoints.
-        // IMPORTANT: Use secure: false and sameSite: 'Lax' for localhost testing!
-        res.cookie('userId', userId, {
-            httpOnly: true,
-            secure: false, 
-            sameSite: 'Lax',
-            maxAge: 30 * 24 * 60 * 60 * 1000
-        });
-        
-        // 3. Create the JWT (now including the 'sub')
-        const jwtToken = jwt.sign(
-            { sub: userId, email: payload.email, name: payload.name },
-            JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-        
-        // 4. Redirect safely
-        return res.redirect('/?token=' + jwtToken);
-        
-    } catch (error) {
-        console.error('Google Auth callback error:', error);
-        res.status(500).send('Authentication failed. Please check server console and ensure JWT_SECRET is in your .env file.');
-    }
-});
-
-
-// GET /api/recharge/history  – Get user recharge transaction history
+// Transaction history
 app.get('/api/recharge/history', async (req, res) => {
-    if (!req.user) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
         const transactions = await Transaction.find({ userId: req.user.userId })
@@ -369,9 +283,60 @@ app.get('/api/recharge/history', async (req, res) => {
     }
 });
 
+// Google OAuth
+app.get('/auth/google', (req, res) => {
+    const authUrl = client.generateAuthUrl({
+        access_type: 'offline',
+        scope: ['profile', 'email'],
+        redirect_uri: `${BASE_URL}/auth/google/callback`
+    });
+    res.redirect(authUrl);
+});
 
+// Google OAuth Callback
+app.get('/auth/google/callback', async (req, res) => {
+    const { code } = req.query;
+    if (!code) return res.status(400).send('Authorization code not provided');
+    
+    try {
+        const { tokens } = await client.getToken(code);
+        const ticket = await client.verifyIdToken({
+            idToken: tokens.id_token,
+            audience: GOOGLE_CLIENT_ID
+        });
+        
+        const payload = ticket.getPayload();
+        const userId = payload.sub;
+        
+        let user = await User.findOne({ userId });
+        if (!user) {
+            user = new User({ userId, tokens: 10 });
+            await user.save();
+        }
+        
+        res.cookie('userId', userId, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'None',
+            maxAge: 30 * 24 * 60 * 60 * 1000
+        });
+        
+        const jwtToken = jwt.sign(
+            { sub: userId, email: payload.email, name: payload.name },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        
+        return res.redirect(`/?token=${jwtToken}`);
+        
+    } catch (error) {
+        console.error('Google Auth callback error:', error);
+        res.status(500).send('Authentication failed');
+    }
+});
 
-// ─── Start server ─────────────────────────────────────────────────────────────
+// Start server
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+    console.log(`✅ Server running on ${BASE_URL} port ${port}`);
+    console.log(`✅ Production mode: ${process.env.NODE_ENV === 'production'}`);
 });
