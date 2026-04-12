@@ -94,6 +94,10 @@ app.use(async (req, res, next) => {
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
+app.get('/', (req, res) => {
+  res.send('Server 3D Tool đang chạy');
+});
+
 // POST /login  – nhận userId từ body, tạo user nếu chưa có, set cookie
 app.post('/login', async (req, res) => {
     const { userId } = req.body;
