@@ -1,4 +1,3 @@
-require('dotenv').config({ path: './.env' });
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -47,6 +46,13 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// Environment Check for Render
+console.log('Checking Envs:', {
+    MONGO: !!process.env.MONGO_URI,
+    GOOGLE: !!process.env.GOOGLE_CLIENT_ID,
+    TSR: !!process.env.TSR_PARTNER_ID
+});
 
 // MongoDB Connection
 const connectDB = async () => {
